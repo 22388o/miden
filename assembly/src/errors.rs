@@ -166,6 +166,33 @@ impl AssemblyError {
         }
     }
 
+    // PROCEDURES
+    // --------------------------------------------------------------------------------------------
+
+    pub fn duplicate_proc_label(step: usize, label: &str) -> AssemblyError {
+        AssemblyError {
+            message: format!("duplicate procedure label: {}", label),
+            step,
+            op: format!("proc.{}", label),
+        }
+    }
+
+    pub fn unmatched_proc(step: usize, label: &str) -> AssemblyError {
+        AssemblyError {
+            message: "proc without matching end".to_string(),
+            step,
+            op: format!("proc.{}", label),
+        }
+    }
+
+    pub fn undefined_proc(step: usize, label: &str) -> AssemblyError {
+        AssemblyError {
+            message: format!("undefined procedure: {}", label),
+            step,
+            op: format!("exec.{}", label),
+        }
+    }
+
     // PUBLIC ACCESSORS
     // --------------------------------------------------------------------------------------------
     pub fn message(&self) -> &String {

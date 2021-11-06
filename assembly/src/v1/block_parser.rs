@@ -1,4 +1,6 @@
-use super::{parse_op_token, AssemblyError, TokenStream};
+use super::{parse_op_token, validate_end_token, AssemblyError, TokenStream, END};
+use crate::v1::validate_proc_label;
+use std::collections::BTreeMap;
 use vm_core::v1::program::{blocks::CodeBlock, Operation};
 use winter_utils::group_vector_elements;
 
@@ -9,7 +11,23 @@ const IF: &str = "if";
 const ELSE: &str = "else";
 const WHILE: &str = "while";
 const REPEAT: &str = "repeat";
-const END: &str = "end";
+const EXEC: &str = "exec";
+
+// BODY PARSER
+// ================================================================================================
+
+pub fn parse_block_body(
+    tokens: &mut TokenStream,
+    proc_map: &BTreeMap<String, CodeBlock>,
+) -> Result<CodeBlock, AssemblyError> {
+    let mut blocks = Vec::new();
+    while let Some(parser) = BlockParser::next(tokens)? {
+        let block = parser.parse(tokens, proc_map)?;
+        blocks.push(block);
+    }
+    // TODO: check that at least one block has been read
+    Ok(combine_blocks(blocks))
+}
 
 // CODE BLOCK PARSER
 // ================================================================================================
@@ -20,10 +38,15 @@ pub enum BlockParser {
     IfElse,
     While,
     Repeat(u32),
+    Exec(String),
 }
 
 impl BlockParser {
-    pub fn parse(&self, tokens: &mut TokenStream) -> Result<CodeBlock, AssemblyError> {
+    pub fn parse(
+        &self,
+        tokens: &mut TokenStream,
+        proc_map: &BTreeMap<String, CodeBlock>,
+    ) -> Result<CodeBlock, AssemblyError> {
         match self {
             Self::Span => {
                 // --------------------------------------------------------------------------------
@@ -44,7 +67,7 @@ impl BlockParser {
                 tokens.advance();
 
                 // read the `if` clause
-                let t_branch = parse_block_body(tokens)?;
+                let t_branch = parse_block_body(tokens, proc_map)?;
 
                 // build the `else` clause; if the else clause is specified, then read it;
                 // otherwise, set to a Span with a single noop
@@ -57,7 +80,7 @@ impl BlockParser {
                             tokens.advance();
 
                             // parse the `false` branch
-                            let f_branch = parse_block_body(tokens)?;
+                            let f_branch = parse_block_body(tokens, proc_map)?;
 
                             // consume the `end` token
                             match tokens.read() {
@@ -94,7 +117,7 @@ impl BlockParser {
                 tokens.advance();
 
                 // read the loop body
-                let loop_body = parse_block_body(tokens)?;
+                let loop_body = parse_block_body(tokens, proc_map)?;
 
                 // consume the `end` token
                 match tokens.read() {
@@ -115,7 +138,7 @@ impl BlockParser {
                 tokens.advance();
 
                 // read the loop body
-                let loop_body = parse_block_body(tokens)?;
+                let loop_body = parse_block_body(tokens, proc_map)?;
 
                 // consume the `end` token
                 match tokens.read() {
@@ -139,6 +162,16 @@ impl BlockParser {
                     Ok(combine_blocks(blocks))
                 }
             }
+            Self::Exec(label) => {
+                // --------------------------------------------------------------------------------
+                // retrieve the procedure block from the proc map and consume the 'exec' token
+                let proc_root = proc_map
+                    .get(label)
+                    .ok_or_else(|| AssemblyError::undefined_proc(tokens.pos(), label))?
+                    .clone();
+                tokens.advance();
+                Ok(proc_root)
+            }
         }
     }
 
@@ -161,6 +194,10 @@ impl BlockParser {
                 REPEAT => {
                     let iter_count = validate_repeat_token(token, tokens.pos())?;
                     Some(Self::Repeat(iter_count))
+                }
+                EXEC => {
+                    let label = validate_exec_token(token, tokens.pos())?;
+                    Some(Self::Exec(label))
                 }
                 END => {
                     validate_end_token(token, tokens.pos())?;
@@ -221,6 +258,7 @@ fn validate_repeat_token(token: &[&str], pos: usize) -> Result<u32, AssemblyErro
     if token.len() > 2 {
         return Err(AssemblyError::extra_param(token, pos));
     }
+    // TODO: make sure token length is not 1
 
     // try to parse the parameter value
     token[1]
@@ -228,16 +266,12 @@ fn validate_repeat_token(token: &[&str], pos: usize) -> Result<u32, AssemblyErro
         .map_err(|_| AssemblyError::invalid_param(token, pos))
 }
 
-fn validate_end_token(token: &[&str], pos: usize) -> Result<(), AssemblyError> {
-    assert_eq!(END, token[0], "not an end");
-    if token.len() > 1 {
-        Err(AssemblyError::invalid_param_reason(
-            token,
-            pos,
-            "expected end".to_string(),
-        ))
-    } else {
-        Ok(())
+fn validate_exec_token(token: &[&str], pos: usize) -> Result<String, AssemblyError> {
+    assert_eq!(EXEC, token[0], "not an exec");
+    match token.len() {
+        1 => Err(AssemblyError::missing_param(token, pos)),
+        2 => validate_proc_label(token[1]),
+        _ => Err(AssemblyError::extra_param(token, pos)),
     }
 }
 
@@ -245,20 +279,11 @@ fn validate_end_token(token: &[&str], pos: usize) -> Result<(), AssemblyError> {
 // ================================================================================================
 
 fn is_control_token(token: &[&str]) -> bool {
-    matches!(token[0], IF | ELSE | WHILE | REPEAT | END)
-}
-
-pub fn parse_block_body(tokens: &mut TokenStream) -> Result<CodeBlock, AssemblyError> {
-    let mut blocks = Vec::new();
-    while let Some(parser) = BlockParser::next(tokens)? {
-        let block = parser.parse(tokens)?;
-        blocks.push(block);
-    }
-    // TODO: check that at least one block has been read
-    Ok(combine_blocks(blocks))
+    matches!(token[0], IF | ELSE | WHILE | REPEAT | EXEC | END)
 }
 
 fn combine_blocks(mut blocks: Vec<CodeBlock>) -> CodeBlock {
+    // TODO: merge consecutive Span blocks
     while blocks.len() > 1 {
         let last_block = if blocks.len() % 2 == 0 {
             None

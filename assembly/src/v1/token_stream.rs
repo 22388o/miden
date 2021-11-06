@@ -3,6 +3,7 @@ use core::fmt;
 // TOKEN STREAM
 // ================================================================================================
 
+#[derive(Debug)]
 pub struct TokenStream<'a> {
     tokens: Vec<&'a str>,
     current: Vec<&'a str>,
