@@ -255,15 +255,13 @@ fn validate_while_token(token: &[&str], pos: usize) -> Result<(), AssemblyError>
 
 fn validate_repeat_token(token: &[&str], pos: usize) -> Result<u32, AssemblyError> {
     assert_eq!(REPEAT, token[0], "not a repeat");
-    if token.len() > 2 {
-        return Err(AssemblyError::extra_param(token, pos));
+    match token.len() {
+        1 => Err(AssemblyError::missing_param(token, pos)),
+        2 => token[1]
+            .parse::<u32>()
+            .map_err(|_| AssemblyError::invalid_param(token, pos)),
+        _ => Err(AssemblyError::extra_param(token, pos)),
     }
-    // TODO: make sure token length is not 1
-
-    // try to parse the parameter value
-    token[1]
-        .parse::<u32>()
-        .map_err(|_| AssemblyError::invalid_param(token, pos))
 }
 
 fn validate_exec_token(token: &[&str], pos: usize) -> Result<String, AssemblyError> {
@@ -283,7 +281,25 @@ fn is_control_token(token: &[&str]) -> bool {
 }
 
 fn combine_blocks(mut blocks: Vec<CodeBlock>) -> CodeBlock {
-    // TODO: merge consecutive Span blocks
+    // merge consecutive Span blocks
+    let mut merged_blocks: Vec<CodeBlock> = Vec::with_capacity(blocks.len());
+    blocks.drain(0..).for_each(|block| {
+        if block.is_span() {
+            if let Some(CodeBlock::Span(last_span)) = merged_blocks.last_mut() {
+                // this is guaranteed to execute because we know that the block is a span
+                if let CodeBlock::Span(span) = block {
+                    last_span.append(span);
+                }
+            } else {
+                merged_blocks.push(block);
+            }
+        } else {
+            merged_blocks.push(block);
+        }
+    });
+
+    // build a binary tree of blocks joining them using Join blocks
+    let mut blocks = merged_blocks;
     while blocks.len() > 1 {
         let last_block = if blocks.len() % 2 == 0 {
             None

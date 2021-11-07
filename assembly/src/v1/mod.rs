@@ -23,6 +23,7 @@ const END: &str = "end";
 // ASSEMBLY COMPILER
 // ================================================================================================
 
+/// TODO: add comments
 pub fn compile_script(source: &str) -> Result<Script, AssemblyError> {
     let mut tokens = TokenStream::new(source);
     let mut proc_map = BTreeMap::new();
@@ -37,6 +38,18 @@ pub fn compile_script(source: &str) -> Result<Script, AssemblyError> {
         }
     }
 
+    // make sure script body is present
+    let next_token = tokens
+        .read()
+        .ok_or_else(|| AssemblyError::missing_begin(tokens.pos()))?;
+    if next_token[0] != BEGIN {
+        return Err(AssemblyError::dangling_ops_after_proc(
+            next_token,
+            tokens.pos(),
+        ));
+    }
+
+    // parse script body and return the resulting script
     let script_root = parse_script(&mut tokens, &proc_map)?;
     Ok(Script::new(script_root))
 }
@@ -49,11 +62,33 @@ fn parse_script(
     tokens: &mut TokenStream,
     proc_map: &BTreeMap<String, CodeBlock>,
 ) -> Result<CodeBlock, AssemblyError> {
+    let script_start = tokens.pos();
+    // consume the 'begin' token
     let header = tokens.read().expect("missing script header");
     validate_begin_token(header, tokens.pos())?;
     tokens.advance();
+
+    // parse the script body
     let root = block_parser::parse_block_body(tokens, proc_map)?;
+
+    // consume the 'end' token
+    match tokens.read() {
+        None => Err(AssemblyError::unmatched_begin(script_start)),
+        Some(token) => match token[0] {
+            END => validate_end_token(token, tokens.pos()),
+            _ => Err(AssemblyError::unmatched_begin(script_start)),
+        },
+    }?;
     tokens.advance();
+
+    // make sure there are no instructions after the end
+    if let Some(token) = tokens.read() {
+        return Err(AssemblyError::dangling_ops_after_script(
+            token,
+            tokens.pos(),
+        ));
+    }
+
     Ok(root)
 }
 

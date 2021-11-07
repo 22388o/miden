@@ -45,14 +45,6 @@ impl AssemblyError {
         }
     }
 
-    pub fn dangling_instructions(step: usize) -> AssemblyError {
-        AssemblyError {
-            message: "dangling instructions after program end".to_string(),
-            step,
-            op: String::from("end"),
-        }
-    }
-
     pub fn invalid_op(op: &[&str], step: usize) -> AssemblyError {
         AssemblyError {
             message: format!("instruction {} is invalid", op.join(".")),
@@ -166,6 +158,33 @@ impl AssemblyError {
         }
     }
 
+    // SCRIPT
+    // --------------------------------------------------------------------------------------------
+
+    pub fn missing_begin(step: usize) -> AssemblyError {
+        AssemblyError {
+            message: "missing script body".to_string(),
+            step,
+            op: "begin".to_string(),
+        }
+    }
+
+    pub fn unmatched_begin(step: usize) -> AssemblyError {
+        AssemblyError {
+            message: "begin without matching end".to_string(),
+            step,
+            op: "begin".to_string(),
+        }
+    }
+
+    pub fn dangling_ops_after_script(op: &[&str], step: usize) -> AssemblyError {
+        AssemblyError {
+            message: "dangling instructions after script end".to_string(),
+            step,
+            op: op.join("."),
+        }
+    }
+
     // PROCEDURES
     // --------------------------------------------------------------------------------------------
 
@@ -190,6 +209,14 @@ impl AssemblyError {
             message: format!("undefined procedure: {}", label),
             step,
             op: format!("exec.{}", label),
+        }
+    }
+
+    pub fn dangling_ops_after_proc(op: &[&str], step: usize) -> AssemblyError {
+        AssemblyError {
+            message: "dangling instructions after procedure end".to_string(),
+            step,
+            op: op.join("."),
         }
     }
 

@@ -43,6 +43,6 @@ fn span_and_simple_if() {
 fn script_with_one_procedure() {
     let source = "proc.foo push.3 push.7 mul end begin push.1 push.2 add exec.foo end";
     let program = super::compile_script(source).unwrap();
-    let expected = "begin span push(1) push(2) add end end";
+    let expected = "begin span push(1) push(2) add push(3) push(7) mul end end";
     assert_eq!(expected, format!("{}", program));
 }
