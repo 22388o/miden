@@ -13,6 +13,14 @@ impl AssemblyError {
     // CONSTRUCTORS
     // --------------------------------------------------------------------------------------------
 
+    pub fn unexpected_eof(step: usize) -> AssemblyError {
+        AssemblyError {
+            message: "unexpected EOF".to_string(),
+            step,
+            op: String::from(""),
+        }
+    }
+
     pub fn empty_program() -> AssemblyError {
         AssemblyError {
             message: String::from("a program must contain at least one instruction"),
@@ -193,6 +201,14 @@ impl AssemblyError {
             message: format!("duplicate procedure label: {}", label),
             step,
             op: format!("proc.{}", label),
+        }
+    }
+
+    pub fn invalid_proc_label(label: &str, op: &[&str], step: usize) -> AssemblyError {
+        AssemblyError {
+            message: format!("invalid procedure label: {}", label),
+            step,
+            op: op.join("."),
         }
     }
 

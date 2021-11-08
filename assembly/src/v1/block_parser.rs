@@ -13,27 +13,43 @@ const WHILE: &str = "while";
 const REPEAT: &str = "repeat";
 const EXEC: &str = "exec";
 
-// BODY PARSER
+// BLOCK PARSER
 // ================================================================================================
 
-pub fn parse_block_body(
+/// TODO: Add comments
+pub fn parse_blocks(
     tokens: &mut TokenStream,
     proc_map: &BTreeMap<String, CodeBlock>,
 ) -> Result<CodeBlock, AssemblyError> {
+    // make sure there is something to be read
+    let start_pos = tokens.pos();
+    if tokens.eof() {
+        return Err(AssemblyError::unexpected_eof(start_pos));
+    }
+
+    // parse the sequence of blocks and add each block to the list
     let mut blocks = Vec::new();
     while let Some(parser) = BlockParser::next(tokens)? {
         let block = parser.parse(tokens, proc_map)?;
         blocks.push(block);
     }
-    // TODO: check that at least one block has been read
-    Ok(combine_blocks(blocks))
+
+    // make sure at least one block has been read
+    if blocks.is_empty() {
+        let start_op = tokens.read_at(start_pos).expect("no start token");
+        Err(AssemblyError::empty_block(start_op, start_pos))
+    } else {
+        // build a binary tree out of the parsed list of blocks
+        Ok(combine_blocks(blocks))
+    }
 }
 
 // CODE BLOCK PARSER
 // ================================================================================================
 
+// TODO: add comments
 #[derive(Debug)]
-pub enum BlockParser {
+enum BlockParser {
     Span,
     IfElse,
     While,
@@ -42,6 +58,7 @@ pub enum BlockParser {
 }
 
 impl BlockParser {
+    // TODO: add comments
     pub fn parse(
         &self,
         tokens: &mut TokenStream,
@@ -67,7 +84,7 @@ impl BlockParser {
                 tokens.advance();
 
                 // read the `if` clause
-                let t_branch = parse_block_body(tokens, proc_map)?;
+                let t_branch = parse_blocks(tokens, proc_map)?;
 
                 // build the `else` clause; if the else clause is specified, then read it;
                 // otherwise, set to a Span with a single noop
@@ -80,7 +97,7 @@ impl BlockParser {
                             tokens.advance();
 
                             // parse the `false` branch
-                            let f_branch = parse_block_body(tokens, proc_map)?;
+                            let f_branch = parse_blocks(tokens, proc_map)?;
 
                             // consume the `end` token
                             match tokens.read() {
@@ -117,7 +134,7 @@ impl BlockParser {
                 tokens.advance();
 
                 // read the loop body
-                let loop_body = parse_block_body(tokens, proc_map)?;
+                let loop_body = parse_blocks(tokens, proc_map)?;
 
                 // consume the `end` token
                 match tokens.read() {
@@ -138,7 +155,7 @@ impl BlockParser {
                 tokens.advance();
 
                 // read the loop body
-                let loop_body = parse_block_body(tokens, proc_map)?;
+                let loop_body = parse_blocks(tokens, proc_map)?;
 
                 // consume the `end` token
                 match tokens.read() {
@@ -175,6 +192,7 @@ impl BlockParser {
         }
     }
 
+    // TODO: add comments
     fn next(tokens: &mut TokenStream) -> Result<Option<Self>, AssemblyError> {
         let parser = match tokens.read() {
             None => None,
@@ -268,7 +286,7 @@ fn validate_exec_token(token: &[&str], pos: usize) -> Result<String, AssemblyErr
     assert_eq!(EXEC, token[0], "not an exec");
     match token.len() {
         1 => Err(AssemblyError::missing_param(token, pos)),
-        2 => validate_proc_label(token[1]),
+        2 => validate_proc_label(token[1], token, pos),
         _ => Err(AssemblyError::extra_param(token, pos)),
     }
 }

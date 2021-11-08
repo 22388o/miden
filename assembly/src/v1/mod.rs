@@ -1,4 +1,4 @@
-use crate::{v1::block_parser::parse_block_body, AssemblyError};
+use crate::{v1::block_parser::parse_blocks, AssemblyError};
 use std::collections::BTreeMap;
 use vm_core::v1::program::{blocks::CodeBlock, Script};
 
@@ -69,7 +69,7 @@ fn parse_script(
     tokens.advance();
 
     // parse the script body
-    let root = block_parser::parse_block_body(tokens, proc_map)?;
+    let root = block_parser::parse_blocks(tokens, proc_map)?;
 
     // consume the 'end' token
     match tokens.read() {
@@ -108,7 +108,7 @@ fn parse_proc(
     tokens.advance();
 
     // parse procedure body
-    let root = parse_block_body(tokens, proc_map)?;
+    let root = parse_blocks(tokens, proc_map)?;
 
     // consume the 'end' token
     match tokens.read() {
@@ -141,13 +141,22 @@ fn validate_proc_token(token: &[&str], pos: usize) -> Result<String, AssemblyErr
     assert_eq!(PROC, token[0], "invalid procedure header");
     match token.len() {
         1 => Err(AssemblyError::missing_param(token, pos)),
-        2 => validate_proc_label(token[1]),
+        2 => validate_proc_label(token[1], token, pos),
         _ => Err(AssemblyError::extra_param(token, pos)),
     }
 }
 
-fn validate_proc_label(label: &str) -> Result<String, AssemblyError> {
-    // TODO: validate name
+fn validate_proc_label(label: &str, token: &[&str], step: usize) -> Result<String, AssemblyError> {
+    // a label must start with an alphanumeric character
+    if label.is_empty() || !label.chars().next().unwrap().is_ascii_alphabetic() {
+        return Err(AssemblyError::invalid_proc_label(label, token, step));
+    }
+
+    // a label can contain only number, letters, underscores, and colons
+    if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == ':') {
+        return Err(AssemblyError::invalid_proc_label(label, token, step));
+    }
+
     Ok(label.to_string())
 }
 
