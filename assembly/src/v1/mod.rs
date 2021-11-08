@@ -20,38 +20,53 @@ const BEGIN: &str = "begin";
 const PROC: &str = "proc";
 const END: &str = "end";
 
-// ASSEMBLY COMPILER
+// ASSEMBLER
 // ================================================================================================
 
 /// TODO: add comments
-pub fn compile_script(source: &str) -> Result<Script, AssemblyError> {
-    let mut tokens = TokenStream::new(source);
-    let mut proc_map = BTreeMap::new();
+pub struct Assembler {}
 
-    // parse procedures and add them to the procedure map; procedures are parsed in the order
-    // in which they appear in the source, and thus, procedures which come later may invoke
-    // preceding procedures
-    while let Some(token) = tokens.read() {
-        match token[0] {
-            PROC => parse_proc(&mut tokens, &mut proc_map)?,
-            _ => break,
+impl Assembler {
+    pub fn new() -> Assembler {
+        Self {}
+    }
+
+    /// TODO: add comments
+    pub fn compile_script(&self, source: &str) -> Result<Script, AssemblyError> {
+        let mut tokens = TokenStream::new(source);
+        let mut proc_map = BTreeMap::new();
+
+        // parse procedures and add them to the procedure map; procedures are parsed in the order
+        // in which they appear in the source, and thus, procedures which come later may invoke
+        // preceding procedures
+        while let Some(token) = tokens.read() {
+            match token[0] {
+                PROC => parse_proc(&mut tokens, &mut proc_map)?,
+                _ => break,
+            }
         }
-    }
 
-    // make sure script body is present
-    let next_token = tokens
-        .read()
-        .ok_or_else(|| AssemblyError::missing_begin(tokens.pos()))?;
-    if next_token[0] != BEGIN {
-        return Err(AssemblyError::dangling_ops_after_proc(
-            next_token,
-            tokens.pos(),
-        ));
-    }
+        // make sure script body is present
+        let next_token = tokens
+            .read()
+            .ok_or_else(|| AssemblyError::missing_begin(tokens.pos()))?;
+        if next_token[0] != BEGIN {
+            return Err(AssemblyError::dangling_ops_after_proc(
+                next_token,
+                tokens.pos(),
+            ));
+        }
 
-    // parse script body and return the resulting script
-    let script_root = parse_script(&mut tokens, &proc_map)?;
-    Ok(Script::new(script_root))
+        // parse script body and return the resulting script
+        let script_root = parse_script(&mut tokens, &proc_map)?;
+        Ok(Script::new(script_root))
+    }
+}
+
+impl Default for Assembler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // PARSERS
@@ -153,7 +168,10 @@ fn validate_proc_label(label: &str, token: &[&str], step: usize) -> Result<Strin
     }
 
     // a label can contain only number, letters, underscores, and colons
-    if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == ':') {
+    if !label
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == ':')
+    {
         return Err(AssemblyError::invalid_proc_label(label, token, step));
     }
 
